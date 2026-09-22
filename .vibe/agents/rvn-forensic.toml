@@ -1,0 +1,128 @@
+display_name = "RVN Forensic"
+description = "Read-only forensic and provenance investigator for RVN and repository artifacts. Discovers and classifies evidence about commits, files, lineage, manifests, logs, identifiers, timestamps, and contradictions; emits LEDGER_IMPACT_CANDIDATES for the rvn-auditor to adjudicate. Never modifies files, history, the frozen ledger, or repository state; never converts inference into observation. Bash is ASK-gated with NO command allowlist: known mutating/high-risk commands are hard-denied; every other command — regardless of how read-only it looks — requires explicit approval."
+
+safety = "safe"
+agent_type = "subagent"
+
+bypass_tool_permissions = false
+
+# Read-only forensic toolset: file reading, text search, skill loading,
+# and an ASK-gated shell restricted by a mutation denylist.
+# Verified against installed vibe 2.9.4 builtin tool names.
+enabled_tools = [
+  "grep",
+  "read_file",
+  "skill",
+  "ask_user_question",
+  "bash",
+]
+
+# Defense in depth: hard-never every mutating/external tool.
+[tools.write_file]
+permission = "never"
+
+[tools.search_replace]
+permission = "never"
+
+[tools.task]
+permission = "never"
+
+[tools.todo]
+permission = "never"
+
+[tools.webfetch]
+permission = "never"
+
+[tools.websearch]
+permission = "never"
+
+# BASH MODE: ASK_ALL_WITH_HARD_DENYLIST (not hard read-only).
+# Why not "always": in vibe 2.9.4, tools.bash.permission="always" bypasses the
+# command allowlist entirely (any command runs unattended) — verified against
+# Bash._is_unconditionally_allowed. Hard command-level read-only is therefore
+# NOT achievable.
+# Why allowlist = []: vibe's BashToolConfig ships a DEFAULT auto-allowlist
+# (cd, echo, git diff, git log, git status, tree, whoami, cat, file, find,
+# head, ls, pwd, stat, tail, uname, wc, which) that survives the config merge
+# when allowlist is omitted. A read-looking executable/subcommand prefix
+# cannot prove an invocation is side-effect free (find -exec/-execdir, sed
+# e/r commands, git helpers/filters/textconv/hooks/pagers, network-capable
+# options). Nothing is auto-approved on prefix appearance.
+# permission="ask" + empty allowlist + denylist below:
+#   - denylisted mutation prefixes resolve to NEVER (no prompt, no execution)
+#   - everything else, including read-looking commands, falls through to
+#     per-command approval prompts
+[tools.bash]
+permission = "ask"
+allowlist = []
+# Mutating commands: hard-never via command denylist (prefix match).
+denylist = [
+  "git add",
+  "git commit",
+  "git push",
+  "git reset",
+  "git checkout",
+  "git switch",
+  "git branch -D",
+  "git merge",
+  "git rebase",
+  "git cherry-pick",
+  "git clean",
+  "git rm",
+  "git mv",
+  "git apply",
+  "git restore",
+  "git stash",
+  "git fetch",
+  "git pull",
+  "git tag",
+  "git worktree",
+  "git update-ref",
+  "git receive-pack",
+  "git upload-pack",
+  "rm",
+  "mv",
+  "cp",
+  "touch",
+  "mkdir",
+  "rmdir",
+  "chmod",
+  "chown",
+  "chgrp",
+  "truncate",
+  "tee",
+  "sed -i",
+  "shred",
+  "sync",
+  "ln",
+  "unlink",
+  "install",
+  "patch",
+  "pip",
+  "pip3",
+  "npm",
+  "apt",
+  "apt-get",
+  "dpkg",
+  "brew",
+  "cargo install",
+  "gem install",
+  "python -m pip",
+  "python3 -m pip",
+  "curl",
+  "wget",
+  "scp",
+  "ssh",
+]
+# Commands denied when run bare (no args) — interactive shells would be
+# mutating by nature.
+denylist_standalone = [
+  "bash",
+  "sh",
+  "zsh",
+  "fish",
+  "dash",
+  "python",
+  "python3",
+  "ipython",
+]
