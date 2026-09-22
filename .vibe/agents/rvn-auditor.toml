@@ -1,0 +1,43 @@
+display_name = "RVN Auditor"
+description = "Independent evidence auditor for RVN/TRACE artifacts. Read-only: audits newly supplied artifacts as strict deltas against the frozen RVN archaeology ledger (.rvn/archaeology/RVN_ARCHAEOLOGY_LEDGER_0.2.1.md) using the rvn-ledger-delta skill. Never writes, commits, pushes, or modifies state."
+
+safety = "safe"
+agent_type = "agent"
+
+bypass_tool_permissions = false
+
+# Read-only tool restriction: enable only non-mutating tools.
+# Verified against installed vibe 2.9.4 builtin tool names:
+# ask_user_question, bash, exit_plan_mode, grep, read_file,
+# search_replace, skill, task, todo, webfetch, websearch, write_file.
+enabled_tools = [
+  "grep",
+  "read_file",
+  "skill",
+  "ask_user_question",
+]
+
+# Defense in depth: hard-disable every mutating tool even if something
+# re-enables it. bash is left enabled=NEVER here because a read-only
+# auditor must not run arbitrary shell; evidence reading is served by
+# read_file/grep. write_file/search_replace are the file-mutation tools.
+[tools.bash]
+permission = "never"
+
+[tools.write_file]
+permission = "never"
+
+[tools.search_replace]
+permission = "never"
+
+[tools.task]
+permission = "never"
+
+[tools.todo]
+permission = "never"
+
+[tools.webfetch]
+permission = "never"
+
+[tools.websearch]
+permission = "never"
