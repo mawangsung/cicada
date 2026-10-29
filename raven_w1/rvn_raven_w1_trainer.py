@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# rvn_raven_w1_trainer.py (v2) — Multi-step trainer for the W1 real-data corpus.
+# rvn_raven_w1_trainer.py (v3) — Multi-step trainer for the W1 real-data corpus.
 # Changes from v1:
 #   - model forward returns dict with 'logits' (or similar); we handle both dict and tensor
 #   - btop/htop-style live resource monitoring (CPU%, RAM) sampled during training
@@ -38,7 +38,7 @@ def cpu_pct():
     try:
         import psutil
         return psutil.cpu_percent(interval=None)
-    except ImportError:
+    except Exception:
         return -1
 
 
@@ -46,7 +46,7 @@ def mem_mb():
     try:
         import psutil
         return psutil.Process().memory_info().rss / 1e6
-    except ImportError:
+    except Exception:
         return -1
 
 
