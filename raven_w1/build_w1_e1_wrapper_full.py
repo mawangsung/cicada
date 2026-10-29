@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-# build_w1_e1_wrapper_full.py — FULL-corpus E1 wrapper (no truncation).
-# Splits each W1 pair into ~200-byte UTF-8 segments; each segment becomes
-# an E1 document wrapped in <RVN:BEGIN> ... <RVN:END>. No content loss.
-# Output root: RVN_RAVEN_E1_W1_FULL_R1 + baseline e1_w1_full_baseline.json
-import argparse, hashlib, json, sys
+# build_w1_e1_wrapper_full.py (v2) — FULL-corpus E1 wrapper.
+# FIX: sanitize segment text (strip control chars/newlines/quotes) before JSON;
+# this prevents invalid JSONL lines (Unterminated string error in admission).
+import argparse, hashlib, json, re, sys
 from pathlib import Path
 
 HOME = Path.home()
@@ -16,13 +15,19 @@ SPLIT_SEED = ROOT_NAME + "::split::2026-10-30"
 SEG_BUDGET = 200
 VAL_PAIRS = 400
 
-D = "RVN-RAVEN-E1-DATASET/1"; T = "RVN-RAVEN-E1-BYTE-BPE/1"
+D = "RVN-RAVEN-E1-DATASET/1"
 A = "RVN-RAVEN-E1-ARTIFACT-HASHES/1"; AD = "RVN-RAVEN-E1-ADMISSION/1"
 B = "RVN-RAVEN-E2-E1-FROZEN-BASELINE/1"
+
+CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
 def sha(b): return hashlib.sha256(b).hexdigest()
 def cjson(o): return (json.dumps(o, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
 def jbytes(rows): return "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows).encode()
+
+def sanitize(text: str) -> str:
+    text = CTRL.sub(" ", text)
+    return " ".join(text.split())
 
 def split_utf8(text, budget):
     data = text.encode("utf-8"); out = []; start = 0
@@ -30,11 +35,14 @@ def split_utf8(text, budget):
         end = min(start + budget, len(data))
         while end > start and end < len(data) and (data[end] & 0xC0) == 0x80:
             end -= 1
-        out.append(data[start:end].decode("utf-8", errors="ignore").strip())
+        out.append(data[start:end].decode("utf-8", errors="ignore"))
         start = end
-    return [s for s in out if s]
+    return out
 
 def seg_doc(seg):
+    seg = sanitize(seg)
+    if not seg:
+        return None
     text = f"<RVN:BEGIN> {seg} <RVN:END>"
     tb = text.encode(); h = sha(tb)
     return {"content_sha256": h, "document_id": f"sha256:{h}", "schema": D,
@@ -49,7 +57,7 @@ def build_split(pairs, split, cap=None):
         text = text.replace("<RVN:", "[RVN:")
         for seg in split_utf8(text, SEG_BUDGET):
             d = seg_doc(seg)
-            if d["content_sha256"] in seen: continue
+            if d is None or d["content_sha256"] in seen: continue
             d["split"] = split; seen.add(d["content_sha256"]); docs.append(d)
     return docs
 
@@ -66,6 +74,13 @@ def main():
     th = {d["content_sha256"] for d in train}
     val = [d for d in build_split(vp, "validation") if d["content_sha256"] not in th]
     print(f"train docs: {len(train)} | validation docs: {len(val)}", flush=True)
+    # pre-verify: every line must parse
+    for name, rows in (("train", train), ("validation", val)):
+        for i, r in enumerate(rows, 1):
+            try:
+                json.loads(json.dumps(r, ensure_ascii=False, sort_keys=True))
+            except Exception as e:
+                print(f"SELF CHECK FAIL {name}:{i}: {e}", file=sys.stderr); sys.exit(3)
     art = OUT_ROOT/"artifacts/e1"; cfg = OUT_ROOT/"config"
     art.mkdir(parents=True, exist_ok=True); cfg.mkdir(parents=True, exist_ok=True)
     tb = E1_TOKENIZER.read_bytes(); (art/"tokenizer.json").write_bytes(tb)
